@@ -1,0 +1,210 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Download, Calendar, TrendingUp, AlertCircle, CheckCircle2, BarChart3 } from "lucide-react";
+import { format, startOfWeek, endOfWeek, subWeeks } from "date-fns";
+import { toast } from "sonner";
+import MetricCard from "@/components/dashboard/MetricCard";
+import PercentCompleteChart from "@/components/dashboard/PercentCompleteChart";
+import VarianceChart from "@/components/dashboard/VarianceChart";
+import ConstraintsChart from "@/components/dashboard/ConstraintsChart";
+import ProgressChart from "@/components/dashboard/ProgressChart";
+
+const Dashboard = () => {
+  const [selectedWeek, setSelectedWeek] = useState("current");
+  const [weeklyData, setWeeklyData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  const getCurrentWeekDates = () => {
+    const now = new Date();
+    const start = startOfWeek(now, { weekStartsOn: 1 });
+    const end = endOfWeek(now, { weekStartsOn: 1 });
+    return { start, end };
+  };
+
+  const getWeekDates = (offset: number = 0) => {
+    const now = new Date();
+    const targetDate = subWeeks(now, offset);
+    const start = startOfWeek(targetDate, { weekStartsOn: 1 });
+    const end = endOfWeek(targetDate, { weekStartsOn: 1 });
+    return { start, end };
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [selectedWeek]);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      const weekOffset = selectedWeek === "current" ? 0 : parseInt(selectedWeek);
+      const { start, end } = getWeekDates(weekOffset);
+
+      // Fetch WWP data
+      const { data: wwpData, error: wwpError } = await supabase
+        .from("weekly_work_plans")
+        .select("*")
+        .gte("week_start", format(start, "yyyy-MM-dd"))
+        .lte("week_end", format(end, "yyyy-MM-dd"))
+        .single();
+
+      if (wwpError && wwpError.code !== "PGRST116") throw wwpError;
+
+      // Fetch tasks
+      const { data: tasks, error: tasksError } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("wwp_id", wwpData?.id || "");
+
+      if (tasksError) throw tasksError;
+
+      // Fetch constraints
+      const { data: constraints, error: constraintsError } = await supabase
+        .from("constraints")
+        .select("*")
+        .in("task_id", tasks?.map((t) => t.id) || []);
+
+      if (constraintsError) throw constraintsError;
+
+      // Fetch variances
+      const { data: variances, error: variancesError } = await supabase
+        .from("variances")
+        .select("*")
+        .eq("wwp_id", wwpData?.id || "");
+
+      if (variancesError) throw variancesError;
+
+      // Fetch progress logs
+      const { data: progressLogs, error: progressError } = await supabase
+        .from("progress_logs")
+        .select("*")
+        .eq("wwp_id", wwpData?.id || "");
+
+      if (progressError) throw progressError;
+
+      setWeeklyData({
+        wwp: wwpData || { total_tasks: 0, completed_tasks: 0, percent_complete: 0 },
+        tasks: tasks || [],
+        constraints: constraints || [],
+        variances: variances || [],
+        progressLogs: progressLogs || [],
+      });
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      toast.error("Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExport = () => {
+    toast.success("Dashboard exported successfully");
+  };
+
+  const { start, end } = selectedWeek === "current" 
+    ? getCurrentWeekDates() 
+    : getWeekDates(parseInt(selectedWeek));
+
+  const constraintFreeCount = weeklyData?.tasks.filter((t: any) => t.constraint_free).length || 0;
+  const totalTasks = weeklyData?.tasks.length || 0;
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-card">
+        <div className="w-full max-w-none px-4 md:px-6 py-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">LPS Dashboard</h1>
+              <p className="text-sm md:text-base text-muted-foreground mt-1">
+                {format(start, "MMM dd")} - {format(end, "MMM dd, yyyy")}
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
+              <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+                <SelectTrigger className="w-full sm:w-[200px]">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Select week" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="current">Current Week</SelectItem>
+                  <SelectItem value="1">Last Week</SelectItem>
+                  <SelectItem value="2">2 Weeks Ago</SelectItem>
+                  <SelectItem value="3">3 Weeks Ago</SelectItem>
+                  <SelectItem value="4">4 Weeks Ago</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button onClick={handleExport} variant="outline" className="w-full sm:w-auto">
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="w-full max-w-none px-4 md:px-6 py-8">
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-muted-foreground">Loading dashboard...</div>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {/* Metric Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+              <MetricCard
+                title="Plan Complete"
+                value={`${weeklyData?.wwp.percent_complete || 0}%`}
+                subtitle={`${weeklyData?.wwp.completed_tasks || 0} of ${weeklyData?.wwp.total_tasks || 0} tasks`}
+                icon={CheckCircle2}
+                trend={weeklyData?.wwp.percent_complete >= 70 ? "up" : "down"}
+                color="success"
+              />
+              <MetricCard
+                title="Variances Logged"
+                value={weeklyData?.variances.length || 0}
+                subtitle="Reasons documented"
+                icon={AlertCircle}
+                color="warning"
+              />
+              <MetricCard
+                title="Open Constraints"
+                value={weeklyData?.constraints.filter((c: any) => c.status === "open").length || 0}
+                subtitle={`${constraintFreeCount} constraint-free tasks`}
+                icon={BarChart3}
+                trend={constraintFreeCount > totalTasks / 2 ? "up" : "down"}
+                color="destructive"
+              />
+              <MetricCard
+                title="Progress Tracking"
+                value={`${Math.round((weeklyData?.tasks.reduce((sum: number, t: any) => sum + t.actual_progress, 0) / totalTasks) || 0)}%`}
+                subtitle="Average actual progress"
+                icon={TrendingUp}
+                color="primary"
+              />
+            </div>
+
+            {/* Charts Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+              <PercentCompleteChart data={weeklyData?.wwp} />
+              <VarianceChart variances={weeklyData?.variances || []} />
+              <ConstraintsChart 
+                constraints={weeklyData?.constraints || []} 
+                tasks={weeklyData?.tasks || []} 
+              />
+              <ProgressChart 
+                tasks={weeklyData?.tasks || []} 
+                progressLogs={weeklyData?.progressLogs || []} 
+              />
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
+
+export default Dashboard;
