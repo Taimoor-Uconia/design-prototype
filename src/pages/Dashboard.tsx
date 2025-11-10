@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { DashboardData } from "@/types/dashboard";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,11 @@ import {
   taskMaturityData,
   lookaheadData,
   constraintTypes,
+  currentWeekData,
+  currentTasks,
+  currentConstraints,
+  currentVariances,
+  currentProgressLogs
 } from "@/lib/sampleData";
 import { toast } from "sonner";
 import MetricCard from "@/components/dashboard/MetricCard";
@@ -23,7 +29,7 @@ import LookaheadAnalysis from "@/components/dashboard/LookaheadAnalysis";
 
 const Dashboard = () => {
   const [selectedWeek, setSelectedWeek] = useState("current");
-  const [weeklyData, setWeeklyData] = useState<any>(null);
+  const [weeklyData, setWeeklyData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const getCurrentWeekDates = () => {
@@ -51,7 +57,20 @@ const Dashboard = () => {
       const weekOffset = selectedWeek === "current" ? 0 : parseInt(selectedWeek);
       const { start, end } = getWeekDates(weekOffset);
 
-      // Fetch WWP data
+      // For current week, always use sample data
+      if (selectedWeek === "current") {
+        setWeeklyData({
+          wwp: currentWeekData,
+          tasks: currentTasks,
+          constraints: currentConstraints,
+          variances: currentVariances,
+          progressLogs: currentProgressLogs
+        });
+        setLoading(false);
+        return;
+      }
+
+      // For other weeks, try Supabase first
       const { data: wwpData, error: wwpError } = await supabase
         .from("weekly_work_plans")
         .select("*")
@@ -93,12 +112,38 @@ const Dashboard = () => {
 
       if (progressError) throw progressError;
 
+      // Use sample data as fallback
       setWeeklyData({
-        wwp: wwpData || { total_tasks: 0, completed_tasks: 0, percent_complete: 0 },
-        tasks: tasks || [],
-        constraints: constraints || [],
-        variances: variances || [],
-        progressLogs: progressLogs || [],
+        wwp: wwpData ? {
+          id: wwpData.id,
+          total_tasks: wwpData.total_tasks,
+          completed_tasks: wwpData.completed_tasks,
+          percent_complete: wwpData.percent_complete,
+          week_start: wwpData.week_start,
+          week_end: wwpData.week_end
+        } : currentWeekData,
+        tasks: tasks?.map(t => ({
+          id: t.id,
+          wwp_id: t.wwp_id,
+          title: t.title,
+          location: t.location,
+          owner: t.owner,
+          constraint_free: t.constraint_free,
+          planned_progress: t.planned_progress || 0,
+          actual_progress: t.actual_progress || 0
+        })) || currentTasks,
+        constraints: constraints?.map(c => ({
+          type: c.description,
+          status: c.status as 'open' | 'resolved',
+          dueDate: c.resolved_at || format(new Date(), 'yyyy-MM-dd'),
+          owner: c.owner
+        })) || currentConstraints,
+        variances: variances?.map(v => ({
+          type: v.reason,
+          impact: parseInt(v.impact || '0'),
+          date: v.logged_at
+        })) || currentVariances,
+        progressLogs: progressLogs || currentProgressLogs
       });
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -145,7 +190,7 @@ const Dashboard = () => {
                   <SelectItem value="4">4 Weeks Ago</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={handleExport} variant="outline" className="w-full sm:w-auto">
+              <Button onClick={handleExport} className="w-full sm:w-auto bg-background border hover:bg-accent">
                 <Download className="mr-2 h-4 w-4" />
                 Export
               </Button>

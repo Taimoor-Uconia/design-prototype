@@ -18,11 +18,19 @@ const ProgressChart = ({ tasks }: ProgressChartProps) => {
     return acc;
   }, {});
 
-  const chartData = Object.entries(locationData).map(([location, data]: [string, any]) => ({
-    location: location.length > 15 ? location.substring(0, 15) + "..." : location,
-    planned: Math.round(data.planned.reduce((sum: number, val: number) => sum + val, 0) / data.planned.length),
-    actual: Math.round(data.actual.reduce((sum: number, val: number) => sum + val, 0) / data.actual.length),
-  }));
+  const chartData = Object.entries(locationData).map(([location, data]: [string, any]) => {
+    const plannedAvg = data.planned.some((val: any) => val !== undefined) 
+      ? Math.round(data.planned.reduce((sum: number, val: number) => sum + (val || 0), 0) / data.planned.length)
+      : 0;
+    const actualAvg = data.actual.some((val: any) => val !== undefined)
+      ? Math.round(data.actual.reduce((sum: number, val: number) => sum + (val || 0), 0) / data.actual.length)
+      : 0;
+    return {
+      location: location.length > 15 ? location.substring(0, 15) + "..." : location,
+      planned: plannedAvg,
+      actual: actualAvg,
+    };
+  });
 
   return (
     <Card>
