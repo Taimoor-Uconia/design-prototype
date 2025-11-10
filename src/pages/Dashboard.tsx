@@ -1,16 +1,25 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download, Calendar, TrendingUp, AlertCircle, CheckCircle2, BarChart3 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, subWeeks } from "date-fns";
+import {
+  wwpReliabilityData,
+  taskMaturityData,
+  lookaheadData,
+  constraintTypes,
+} from "@/lib/sampleData";
 import { toast } from "sonner";
 import MetricCard from "@/components/dashboard/MetricCard";
 import PercentCompleteChart from "@/components/dashboard/PercentCompleteChart";
 import VarianceChart from "@/components/dashboard/VarianceChart";
 import ConstraintsChart from "@/components/dashboard/ConstraintsChart";
 import ProgressChart from "@/components/dashboard/ProgressChart";
+import WWPReliabilityChart from "@/components/dashboard/WWPReliabilityChart";
+import TaskMaturityChart from "@/components/dashboard/TaskMaturityChart";
+import LookaheadAnalysis from "@/components/dashboard/LookaheadAnalysis";
 
 const Dashboard = () => {
   const [selectedWeek, setSelectedWeek] = useState("current");
@@ -189,16 +198,52 @@ const Dashboard = () => {
 
             {/* Charts Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-              <PercentCompleteChart data={weeklyData?.wwp} />
-              <VarianceChart variances={weeklyData?.variances || []} />
+              <WWPReliabilityChart weeklyData={wwpReliabilityData} />
+              <TaskMaturityChart maturityData={taskMaturityData} />
+              <LookaheadAnalysis lookaheadData={lookaheadData} />
               <ConstraintsChart 
                 constraints={weeklyData?.constraints || []} 
                 tasks={weeklyData?.tasks || []} 
               />
+              <VarianceChart variances={weeklyData?.variances || []} />
               <ProgressChart 
                 tasks={weeklyData?.tasks || []} 
                 progressLogs={weeklyData?.progressLogs || []} 
               />
+            </div>
+            
+            {/* Additional LPS Metrics Section */}
+            <div className="mt-8">
+              <h2 className="text-xl font-semibold mb-4">Detailed LPS Metrics</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Make-Ready Process</CardTitle>
+                    <CardDescription>Weekly constraint removal rate</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {constraintTypes.slice(0, 5).map((type) => {
+                        const rate = Math.round(Math.random() * 100);
+                        return (
+                          <div key={type} className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">{type}</span>
+                            <div className="flex items-center gap-2">
+                              <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-primary" 
+                                  style={{ width: `${rate}%` }}
+                                />
+                              </div>
+                              <span className="text-sm font-medium">{rate}%</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
         )}
