@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { DashboardData } from "@/types/dashboard";
+import { DashboardData, Task, TaskStatus } from "@/types/dashboard";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,9 +23,12 @@ import PercentCompleteChart from "@/components/dashboard/PercentCompleteChart";
 import VarianceChart from "@/components/dashboard/VarianceChart";
 import ConstraintsChart from "@/components/dashboard/ConstraintsChart";
 import ProgressChart from "@/components/dashboard/ProgressChart";
-import WWPReliabilityChart from "@/components/dashboard/WWPReliabilityChart";
-import TaskMaturityChart from "@/components/dashboard/TaskMaturityChart";
-import LookaheadAnalysis from "@/components/dashboard/LookaheadAnalysis";
+import EnhancedTaskDetails from "@/components/dashboard/EnhancedTaskDetails";
+import TeamPerformanceDashboard from "@/components/dashboard/TeamPerformanceDashboard";
+import AdvancedIssuesManagement from "@/components/dashboard/AdvancedIssuesManagement";
+import LocationProgressVisualization from "@/components/dashboard/LocationProgressVisualization";
+import RiskOpportunityAnalysis from "@/components/dashboard/RiskOpportunityAnalysis";
+import ConstraintAnalysis from "@/components/dashboard/ConstraintAnalysis";
 
 const Dashboard = () => {
   const [selectedWeek, setSelectedWeek] = useState("current");
@@ -126,12 +129,25 @@ const Dashboard = () => {
           id: t.id,
           wwp_id: t.wwp_id,
           title: t.title,
+          description: `Task ${t.id} at ${t.location}`,
           location: t.location,
           owner: t.owner,
+          lead: t.owner,
+          teamMembers: [], // Will be populated through a separate query if needed
+          labels: [t.location],
+          company: t.owner,
+          planned_start: format(start, 'yyyy-MM-dd'),
+          planned_end: format(end, 'yyyy-MM-dd'),
+          actual_start: t.created_at,
+          actual_end: undefined,
+          status: t.status as TaskStatus,
+          issues: [], // Will be populated through a separate query if needed
           constraint_free: t.constraint_free,
           planned_progress: t.planned_progress || 0,
-          actual_progress: t.actual_progress || 0
-        })) || currentTasks,
+          actual_progress: t.actual_progress || 0,
+          priority: 'medium' as const,
+          dependencies: []
+        } as Task)) || currentTasks,
         constraints: constraints?.map(c => ({
           type: c.description,
           status: c.status as 'open' | 'resolved',
@@ -241,54 +257,52 @@ const Dashboard = () => {
               />
             </div>
 
-            {/* Charts Grid */}
+            {/* Team Performance and Issues Management */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-              <WWPReliabilityChart weeklyData={wwpReliabilityData} />
-              <TaskMaturityChart maturityData={taskMaturityData} />
-              <LookaheadAnalysis lookaheadData={lookaheadData} />
-              <ConstraintsChart 
-                constraints={weeklyData?.constraints || []} 
+              <TeamPerformanceDashboard 
                 tasks={weeklyData?.tasks || []} 
+                period={{ start, end }}
               />
-              <VarianceChart variances={weeklyData?.variances || []} />
+              <AdvancedIssuesManagement 
+                tasks={weeklyData?.tasks || []}
+                period={{ start, end }}
+              />
+            </div>
+
+            {/* Location Progress */}
+            <div className="grid grid-cols-1 lg:grid-cols-1 gap-4 md:gap-6">
+              <LocationProgressVisualization 
+                tasks={weeklyData?.tasks || []}
+                period={{ start, end }}
+              />
+            </div>
+
+            {/* Constraints and Risk Analysis */}
+            <div className="grid grid-cols-1 gap-4 md:gap-6">
+              <ConstraintAnalysis tasks={weeklyData?.tasks || []} />
+              <RiskOpportunityAnalysis 
+                tasks={weeklyData?.tasks || []}
+                period={{ start, end }}
+              />
+            </div>
+
+            {/* Performance Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mt-6">
               <ProgressChart 
                 tasks={weeklyData?.tasks || []} 
                 progressLogs={weeklyData?.progressLogs || []} 
               />
+              <VarianceChart 
+                variances={weeklyData?.variances || []} 
+              />
             </div>
-            
-            {/* Additional LPS Metrics Section */}
+
+            {/* Task Management Dashboard */}
             <div className="mt-8">
-              <h2 className="text-xl font-semibold mb-4">Detailed LPS Metrics</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Make-Ready Process</CardTitle>
-                    <CardDescription>Weekly constraint removal rate</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {constraintTypes.slice(0, 5).map((type) => {
-                        const rate = Math.round(Math.random() * 100);
-                        return (
-                          <div key={type} className="flex items-center justify-between">
-                            <span className="text-sm text-muted-foreground">{type}</span>
-                            <div className="flex items-center gap-2">
-                              <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-primary" 
-                                  style={{ width: `${rate}%` }}
-                                />
-                              </div>
-                              <span className="text-sm font-medium">{rate}%</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+              <EnhancedTaskDetails 
+                tasks={weeklyData?.tasks || []}
+                period={{ start, end }}
+              />
             </div>
           </div>
         )}
